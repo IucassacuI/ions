@@ -1,11 +1,38 @@
 #include <cutils.h>
-#include <iup.h>
-#include <iup_config.h>
+#include <iup/iup.h>
+#include <iup/iup_config.h>
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
-#include <windows.h>
+#include <sys/types.h>
+#include <sys/socket.h>
+#include <sys/un.h>
+#include <unistd.h>
 #include "helpers.h"
+
+char *readline(int fd){
+	char *buffer = mem_alloc(10);
+	int size = 10;
+	int pos = 0;
+
+	while(1){
+		if(pos == size){
+			size += 10;
+			buffer = mem_ralloc(buffer, size);
+		}
+	
+		read(fd, buffer + pos, 1);
+
+		if(buffer[pos] == '\n'){
+			buffer[pos] = 0;
+			break;
+		}
+
+		pos++;
+	}
+
+	return buffer;
+}
 
 char *getcurrfeed(void){
 	Ihandle *tree = IupGetHandle("tree");
@@ -32,69 +59,68 @@ char *getcurrfeed(void){
 }
 
 void setmetadata(void){
-	char *feed = getcurrfeed();
+	int fd = librarian();
 
-	char *command = str_format("librarian.exe --feed \"%s\" --metadata", feed);
-	int err = librarian(command);
-	if(err){
+	char *feed = getcurrfeed();
+	char *command = str_format("METADATA %s", feed);
+	write(fd, command, strlen(command));
+
+	char *status = readline(fd);
+
+	if(str_include(status, "ERROR")){
+		int err = atoi(str_split(status, " ")[1]);
 		showerror(err, feed);
 		return;
 	}
 
-	FILE *out = fopen("out", "r");
-
-	char *title = mem_alloc(1000);
-	mem_read(title, out);
+	char *title = readline(fd);
 
 	Ihandle *feedtitle = IupGetHandle("feedtitle");
 	IupSetStrAttribute(feedtitle, "TITLE", title);
 
-	char *author = mem_alloc(100);
-	mem_read(author, out);
+	char *author = readline(fd);
 
 	Ihandle *feedauthor = IupGetHandle("feedauthor");
 	IupSetStrAttribute(feedauthor, "TITLE", author);
 
-	char *hyperlink = mem_alloc(2000);
-	mem_read(hyperlink, out);
+	char *hyperlink = readline(fd);
 
 	Ihandle *feedhyperlink = IupGetHandle("feedhyperlink");
 	IupSetStrAttribute(feedhyperlink, "TITLE", hyperlink);
 	IupSetStrAttribute(feedhyperlink, "URL", hyperlink);
 
-	char *published = mem_alloc(100);
-	mem_read(published, out);
+	char *published = readline(fd);
 
 	Ihandle *feedpubdate = IupGetHandle("feedpubdate");
 	IupSetStrAttribute(feedpubdate, "TITLE", published);
 
-	char *updated = mem_alloc(100);
-	mem_read(updated, out);
-
-	fclose(out);
+	char *updated = readline(fd);
 
 	Ihandle *feedupdated = IupGetHandle("feedupdated");
 	IupSetStrAttribute(feedupdated, "TITLE", updated);
 
 	Ihandle *feedbox = IupGetHandle("feedbox");
 	IupRefresh(feedbox);
+
+	close(fd);
+	mem_freeall(false);
 }
 
 char *color(char *url, int rw_access, char* rgbcolor){
-	char *command = str_format("librarian.exe --feed \"%s\" --metadata", url);
-	int err = librarian(command);
+	char *command = str_format("METADATA %s", url);
+	int fd = librarian();
+	write(fd, command, strlen(command));
 
-	if(err){
+	char *status = readline(fd);
+	if(str_include(status, "ERROR")){
+		int err = atoi(str_split(status, " ")[1]);
 		showerror(err, url);
 		return "";
 	}
 
-	FILE *out = fopen("out", "r");
+	char *name = readline(fd);
 
-	char *name = mem_alloc(100);
-	mem_read(name, out);
-
-	fclose(out);
+	close(fd);
 
 	Ihandle *tree = IupGetHandle("tree");
 	int nodes = IupGetInt(tree, "COUNT");
@@ -120,28 +146,23 @@ char *color(char *url, int rw_access, char* rgbcolor){
 
 void setitem(int pos){
 	char *feed = getcurrfeed();
+	char *command = str_format("ITEM %s %d", feed, pos);
 
-	char *command = str_format("librarian.exe --feed \"%s\" --item %d", feed, pos);
+	int fd = librarian();
+	write(fd, command, strlen(command));
 
-	int err = librarian(command);
-	if(err != 0){
+	char *status = readline(fd);
+	
+	if(str_include(status, "ERROR")){
+		int err = atoi(str_split(status, " ")[1]);
 		showerror(err, feed);
 		return;
 	}
 
-	FILE *out = fopen("out", "r");
-
-	char *title = mem_alloc(1000);
-	mem_read(title, out);
-
-	char *url = mem_alloc(2000);
-	mem_read(url, out);
-
-	char *pubdate = mem_alloc(100);
-	mem_read(pubdate, out);
-
-	char *update = mem_alloc(100);
-	mem_read(update, out);
+	char *title = readline(fd);
+	char *pubdate = readline(fd);
+	char *update = readline(fd);
+	char *url = readline(fd);
 
 	Ihandle *entrytitle = IupGetHandle("entrytitle");
 	IupSetStrAttribute(entrytitle, "TITLE", title);
@@ -159,11 +180,12 @@ void setitem(int pos){
 	Ihandle *entrybox = IupGetHandle("entrybox");
 	IupRefresh(entrybox);
 
-	fclose(out);
+	close(fd);
+	mem_freeall(false);
 }
 
-int update_one(char *feed){
-	char *command = str_format("librarian.exe --feed \"%s\" --update", feed);
+int update_one(int fd, char *feed){
+	char *command = str_format("UPDATE %s", feed);
 	char *filter_out = "";
 
 	Ihandle *config = IupGetHandle("config");
@@ -208,34 +230,43 @@ int update_one(char *feed){
 	}
 
 	if(!str_equal(filter_out, "")){
-		command = str_concat(command, str_format(" --filter \"%s\"", filter_out));
+		command = str_concat(command, str_format(" %s", filter_out));
 	}
 
-	int exitcode = librarian(command);
-	if(exitcode != 0)
-		showerror(exitcode, feed);
+	write(fd, command, strlen(command));
 
-	return exitcode;
+	char *status = readline(fd);
+	
+	if(str_include(status, "ERROR")){
+		int err = atoi(str_split(status, " ")[1]);
+		showerror(err, feed);
+		return err;
+	}
+
+	return 0;
 }
 
 void updatefeed(void){
 	char *feed = getcurrfeed();
 
-	int err = update_one(feed);
-	if(err)
+	int fd = librarian();
+
+	int err = update_one(fd, feed);
+	if(err){
+		showerror(err, feed);
 		return;
+	}
 
-	FILE *out = fopen("out", "r");
+	char *status = readline(fd);
 
-	char *status = mem_alloc(10);
-	mem_read(status, out);
-
-	fclose(out);
+	close(fd);
 
 	if(str_equal(status, "true"))
 		IupMessage("Notificação", "Feed atualizado");
 	else
 		IupMessage("Notificação", "Nada de novo por aqui...");
+
+	mem_freeall(false);
 }
 
 void updatefeeds(void){
@@ -265,18 +296,17 @@ void updatefeeds(void){
 
 			color(url, 1, "127 127 127");
 
-			int exitcode = update_one(url);
-			if(exitcode != 0){
+			int fd = librarian();
+
+			int err = update_one(fd, url);
+			if(err != 0){
 				color(url, 1, IupGetGlobal("DLGFGCOLOR"));
 				continue;
 			}
 
-			FILE *out = fopen("out", "r");
+			char *result = readline(fd);
 
-			char *result = mem_alloc(10);
-			mem_read(result, out);
-
-			fclose(out);
+			close(fd);
 
 			if(str_equal(result, "true"))
 				color(url, 1, "0 0 255");
@@ -285,6 +315,7 @@ void updatefeeds(void){
 		}
 
 	}
+
 	mem_freeall(false);
 }
 
@@ -317,22 +348,18 @@ void showerror(int status, char *url){
 	return;
 }
 
-int librarian(char *command){
-	STARTUPINFO si;
-	PROCESS_INFORMATION pi;
+int librarian(void){
+	int fd;
+	struct sockaddr_un server = {0};
 
-	ZeroMemory(&si, sizeof(si));
-	si.cb = sizeof(si);
-	ZeroMemory(&pi, sizeof(pi));
+	fd = socket(AF_UNIX, SOCK_STREAM, 0);
+	server.sun_family = AF_UNIX;
+	strcpy(server.sun_path, "./sock");
 
-	CreateProcess(NULL, command, NULL, NULL, FALSE, CREATE_NO_WINDOW, NULL, NULL, &si, &pi);
-	WaitForSingleObject(pi.hProcess, INFINITE);
+	if(connect(fd, (struct sockaddr *) &server, sizeof(server)) == -1){
+		IupMessageError(NULL, "Fatal: conexão com o servidor local não pôde ser estabelecida.");
+		exit(1);
+	}
 
-	DWORD exitcode = 0;
-	GetExitCodeProcess(pi.hProcess, &exitcode);
-
-	CloseHandle(pi.hProcess);
-	CloseHandle(pi.hThread);
-
-	return (int) exitcode;
+	return fd;
 }

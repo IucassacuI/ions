@@ -1,10 +1,11 @@
 #include <cutils.h>
-#include <iup.h>
-#include <iup_config.h>
+#include <iup/iup.h>
+#include <iup/iup_config.h>
 #include <math.h>
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <unistd.h>
 #include "callbacks.h"
 #include "helpers.h"
 
@@ -95,12 +96,23 @@ int remocat_cb(void){
 	int count = str_count(feeds, ",");
 	char **list = str_split(feeds, ",");
 
+	int fd = librarian();
+
 	for(int i = 0; i < count; i++){
-		librarian(str_format("librarian.exe --feed \"%s\" --remove", list[i]));
+		char *command = str_format("REMOVE %s", list[i]);
+		write(fd, command, strlen(command));
+
+		char *status = readline(fd);
+
+		if(str_include(status, "ERROR")){
+			int err = atoi(str_split(status, " ")[1]);
+			showerror(err, list[i]);
+		}
 	}
 
 	IupConfigSetVariableStr(config, "CAT", title, "");
 
+	close(fd);
 	return IUP_DEFAULT;
 }
 
@@ -132,9 +144,13 @@ int addfeed_cb(void){
 	if(status == 0)
 		return IUP_DEFAULT;
 
-	status = update_one(url);
+	int fd = librarian();
+
+	status = update_one(fd, url);
 	if(status != 0)
 		return IUP_DEFAULT;
+
+	close(fd);
 
 	char *titleattr = str_format("TITLE%d", selected);
 
@@ -153,27 +169,29 @@ int addfeed_cb(void){
 		IupConfigSetVariableStr(config, "CAT", category, copy);
 	}
 
-	char *command2 = str_format("librarian.exe --feed \"%s\" --metadata", url);
-	status = librarian(command2);
-	if(status != 0){
-		showerror(status, url);
+	char *command2 = str_format("METADATA %s", url);
+
+	fd = librarian();
+	write(fd, command2, strlen(command2));
+
+	char *stat = readline(fd);
+	if(str_include(stat, "ERROR")){
+		int err = atoi(str_split(stat, " ")[1]);
+		showerror(err, url);
 		return IUP_DEFAULT;
 	}
 
 	char *leaf = str_format("ADDLEAF%d", selected);
 
-	char *title = mem_alloc(TITLE_LIMIT);
+	char *title = readline(fd);
 
-	FILE *out = fopen("out", "r");
-	mem_read(title, out);
-	fclose(out);
+	IupSetStrAttribute(tree, leaf, title);
 
-	IupSetAttribute(tree, leaf, title);
-
+	close(fd);
 	return IUP_DEFAULT;
 }
 
- int remofeed_cb(void){
+int remofeed_cb(void){
 	Ihandle *tree = IupGetHandle("tree");
 	Ihandle *config = IupGetHandle("config");
 
@@ -188,9 +206,7 @@ int addfeed_cb(void){
 	}
 
 	char *parentattr = str_format("PARENT%d", selected);
-
 	int catid = IupGetInt(tree, parentattr);
-
 	char *titleattr = str_format("TITLE%d", catid);
 
 	char *category = IupGetAttribute(tree, titleattr);
@@ -208,12 +224,19 @@ int addfeed_cb(void){
 
 	IupSetAttribute(tree, "DELNODE", "SELECTED");
 
-	char *command = str_format("librarian.exe --feed \"%s\" --remove", currfeed);
+	char *command = str_format("REMOVE %s", currfeed);
 
-	int status = librarian(command);
-	if(status != 0){
-		showerror(status, currfeed);
+	int fd = librarian();
+	write(fd, command, strlen(command));
+
+	char *status = readline(fd);
+
+	if(str_include(status, "ERROR")){
+		int err = atoi(str_split(status, " ")[1]);
+		showerror(err, currfeed);
 	}
+
+	close(fd);
 
 	return IUP_DEFAULT;
 }
@@ -234,29 +257,35 @@ int feedselection_cb(Ihandle *h, int selected, int status){
 	setmetadata();
 
 	char *feed = getcurrfeed();
+
 	color(feed, 1, IupGetGlobal("DLGFGCOLOR"));
 
-	char *command = str_format("librarian.exe --feed \"%s\" --items", feed);
-	int err = librarian(command);
+	char *command = str_format("ITEMS %s", feed);
 
-	if(err != 0){
-		showerror(status, feed);
+	int fd = librarian();
+	write(fd, command, strlen(command));
+
+	char *stat = readline(fd);
+
+	if(str_include(stat, "ERROR")){
+		int err = atoi(str_split(stat, " ")[1]);
+		showerror(err, feed);
 		return IUP_DEFAULT;
 	}
 
-	FILE *out = fopen("out", "r");
-
-	char *item = mem_alloc(TITLE_LIMIT);
-
 	int counter = 0;
-	while(mem_read(item, out)){
+	while(1){
+		char *item = readline(fd);
+		if(strlen(item) == 0)
+			break;
+
 		counter++;
-		IupSetAttribute(list, str_format("%d", counter), item);
+		IupSetStrAttribute(list, str_format("%d", counter), item);
 		IupMap(list);
 		IupRefresh(itembox);
 	}
 
-	fclose(out);
+	close(fd);
 	return IUP_DEFAULT;
 }
 
@@ -311,7 +340,7 @@ int themes_cb(void){
 	IupConfigSetVariableInt(config, "THEME", "CURRENT", selected);
 
 	char *binname = IupGetGlobal("EXEFILENAME");
-	IupExecute(binname, NULL);
+	IupExecute(binname, "");
 
 	return IUP_CLOSE;
 }
@@ -386,26 +415,7 @@ int open_cb(void){
 	Ihandle *hyperlink = IupGetHandle("entryhyperlink");
 	char *url = IupGetAttribute(hyperlink, "URL");
 
-	IupExecute("C:\\Program Files\\Mozilla Firefox\\firefox.exe", url);
-
-	return IUP_DEFAULT;
-}
-
-int vlc_cb(void){
-	Ihandle *hyperlink = IupGetHandle("entryhyperlink");
-	char *url = IupGetAttribute(hyperlink, "URL");
-	url[strlen(url) - 1] = 0;
-
-	IupExecute("C:\\Program Files\\VideoLAN\\VLC\\vlc.exe", url);
-
-	return IUP_DEFAULT;
-}
-
-int lagrange_cb(void){
-	Ihandle *hyperlink = IupGetHandle("entryhyperlink");
-	char *url = IupGetAttribute(hyperlink, "URL");
-
-	IupExecute("C:\\Program Files\\Lagrange\\lagrange.exe", url);
+	IupExecute("firefox", url);
 
 	return IUP_DEFAULT;
 }

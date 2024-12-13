@@ -2,14 +2,13 @@ package main
 
 import (
 	"crypto/sha256"
-	"encoding/xml"
-	"flag"
 	"fmt"
+	"github.com/IucassacuI/feeds"
 	"io"
-	"librarian/atom"
-	"librarian/rss"
+	"net"
 	"net/http"
 	"os"
+	"strconv"
 	"strings"
 )
 
@@ -20,6 +19,8 @@ const (
 	DIRECTORY_ERR
 	UNMARSHALING_FAILED
 	REMOFEED_FAILED
+	SOCK_LISTEN_FAILED
+	SOCK_ACCEPT_FAILED
 )
 
 func createlibrary() {
@@ -48,7 +49,6 @@ func checklibrary(feedurl string) bool {
 	var hash string = calchash(feedurl)
 
 	_, err := os.ReadFile(hash)
-
 	return err == nil
 }
 
@@ -56,274 +56,213 @@ func readfromlibrary(feedurl string) []byte {
 	var hash string = calchash(feedurl)
 
 	content, _ := os.ReadFile(hash)
-
 	return content
 }
 
-func updatelibrary(feed, words string) {
+func updatelibrary(conn net.Conn, feed, words string) {
 	var hash string = calchash(feed)
 
 	resp, err := http.Get(feed)
 	if err != nil {
-		os.Exit(CONNECTION_FAILED)
+		conn.Write([]byte("ERROR " + strconv.Itoa(CONNECTION_FAILED) + "\n"))
+		return
 	}
 
 	if resp.StatusCode != 200 {
-		os.Exit(resp.StatusCode)
+		conn.Write([]byte("ERROR" + strconv.Itoa(resp.StatusCode) + "\n"))
+		return
 	}
 
 	defer resp.Body.Close()
 	body, err := io.ReadAll(resp.Body)
 
 	if err != nil {
-		os.Exit(READ_FAILED)
+		conn.Write([]byte("ERROR " + strconv.Itoa(READ_FAILED) + "\n"))
+		return
 	}
 
 	if words != "" {
-		body = filterfeed(body, words)
+		body = filterfeed(conn, body, words)
 	}
+
+	if body == nil {
+		conn.Write([]byte("ERROR" + strconv.Itoa(INVALID_FEED) + "\n"))
+		return
+	}
+
+	conn.Write([]byte("OK\n"))
 
 	if checklibrary(feed) {
 		onlibrary, _ := os.ReadFile(hash)
-		os.Chdir("..")
-
-		var out, _ = os.OpenFile("out", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
-
-		fmt.Fprintf(out, "%v", len(body) != len(onlibrary))
-		out.Close()
-
-		os.Chdir("library")
+		status := fmt.Sprintf("%v\n", len(body) != len(onlibrary))
+		conn.Write([]byte(status))
 	}
 
 	os.WriteFile(hash, body, os.ModePerm)
 }
 
-func showinfoatom(feed []byte, metadata bool, item int, items bool) {
-	var parsed atom.Feed
-	err := xml.Unmarshal(feed, &parsed)
-
-	if err != nil {
-		os.Exit(UNMARSHALING_FAILED)
+func showmetadata(conn net.Conn, feed string) {
+	if !checklibrary(feed) {
+		conn.Write([]byte("ERROR " + strconv.Itoa(INVALID_FEED) + "\n"))
+		return
 	}
 
-	for _, elm := range []*string{&parsed.Title, &parsed.Author.Name, &parsed.Author.URI, &parsed.Published, &parsed.Updated} {
-		if *elm == "" {
-			*elm = "N/A"
-		}
+	data := readfromlibrary(feed)
+	doc := feeds.Parse(data)
+
+	if doc.Title == "" {
+		conn.Write([]byte("ERROR " + strconv.Itoa(INVALID_FEED) + "\n"))
+		return
 	}
 
-	var out, _ = os.OpenFile("out", os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0666)
-
-	if metadata {
-		fmt.Fprintln(out, parsed.Title)
-		fmt.Fprintln(out, parsed.Author.Name)
-		fmt.Fprintln(out, parsed.Author.URI)
-		fmt.Fprintln(out, parsed.Published)
-		fmt.Fprintln(out, parsed.Updated)
-	} else if item != -1 {
-		entry := parsed.Entries[item]
-
-		for _, elm := range []string{entry.Title, entry.Hyperlink.Href, entry.Published, entry.Updated} {
-			if elm == "" {
-				fmt.Fprintln(out, "N/A")
-			} else {
-				fmt.Fprintln(out, elm)
-			}
-		}
-
-	} else if items {
-		for _, elm := range parsed.Entries {
-			fmt.Fprintln(out, elm.Title)
-		}
-	}
-
-	out.Close()
+	conn.Write([]byte("OK\n"))
+	conn.Write([]byte(doc.Title + "\n"))
+	conn.Write([]byte(doc.Author + "\n"))
+	conn.Write([]byte(doc.Hyperlink + "\n"))
+	conn.Write([]byte(doc.Published + "\n"))
+	conn.Write([]byte(doc.Updated + "\n"))
 }
 
-func showinforss(data []byte, metadata bool, item int, items bool) {
-	var parsed rss.Feed
-	err := xml.Unmarshal(data, &parsed)
-
-	if err != nil {
-		os.Exit(UNMARSHALING_FAILED)
+func showitem(conn net.Conn, feed string, number int) {
+	if !checklibrary(feed) {
+		conn.Write([]byte("ERROR " + strconv.Itoa(INVALID_FEED) + "\n"))
+		return
 	}
 
-	var feed rss.Channel = parsed.Channel
-	for _, elm := range []*string{&feed.Title, &feed.Copyright, &feed.Hyperlink, &feed.Published, &feed.Updated} {
-		if *elm == "" {
-			*elm = "N/A"
-		}
+	data := readfromlibrary(feed)
+	doc := feeds.Parse(data)
+
+	if doc.Title == "" {
+		conn.Write([]byte("ERROR " + strconv.Itoa(INVALID_FEED) + "\n"))
+		return
 	}
 
-	var out, _ = os.OpenFile("out", os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0666)
+	item := doc.Items[number]
 
-	if metadata {
-		fmt.Fprintln(out, feed.Title)
-		fmt.Fprintln(out, feed.Copyright)
-		fmt.Fprintln(out, feed.Hyperlink)
-		fmt.Fprintln(out, feed.Published)
-		fmt.Fprintln(out, feed.Updated)
-	} else if item != -1 {
-		item := feed.Items[item]
-
-		for _, elm := range []string{item.Title, item.Hyperlink, item.Published} {
-			if elm == "" {
-				fmt.Fprintln(out, "N/A")
-			} else {
-				fmt.Fprintln(out, elm)
-			}
-		}
-		fmt.Fprintln(out, "N/A")
-	} else if items {
-		for _, elm := range feed.Items {
-			fmt.Fprintln(out, elm.Title)
-		}
-	}
-
-	out.Close()
+	conn.Write([]byte("OK\n"))
+	conn.Write([]byte(item.Title + "\n"))
+	conn.Write([]byte(item.Published + "\n"))
+	conn.Write([]byte(item.Updated + "\n"))
+	conn.Write([]byte(item.Hyperlink + "\n"))
 }
 
-func removefeed(feed string) {
+func showitems(conn net.Conn, feed string) {
+	if !checklibrary(feed) {
+		conn.Write([]byte("ERROR " + strconv.Itoa(INVALID_FEED) + "\n"))
+		return
+	}
+
+	data := readfromlibrary(feed)
+	doc := feeds.Parse(data)
+
+	if doc.Title == "" {
+		conn.Write([]byte("ERROR " + strconv.Itoa(INVALID_FEED) + "\n"))
+		return
+	}
+
+	conn.Write([]byte("OK\n"))
+
+	for _, item := range doc.Items {
+		conn.Write([]byte(item.Title + "\n"))
+	}
+}
+
+func removefeed(conn net.Conn, feed string) {
 	var hash string = calchash(feed)
 
 	err := os.Remove(hash)
 
-	if err != nil {
-		os.Exit(REMOFEED_FAILED)
+	if err == nil {
+		conn.Write([]byte("OK\n"))
+	} else {
+		conn.Write([]byte("ERROR " + strconv.Itoa(REMOFEED_FAILED) + "\n"))
 	}
 }
 
-func filterrss(feed []byte, filter string) []byte {
-	var doc rss.Feed
-	err := xml.Unmarshal(feed, &doc)
+func filterfeed(conn net.Conn, feed []byte, filter string) []byte {
+	var parsed feeds.Feed = feeds.Parse(feed)
 
-	if err != nil {
-		os.Exit(UNMARSHALING_FAILED)
+	if parsed.Title == "" {
+		conn.Write([]byte("ERROR" + strconv.Itoa(UNMARSHALING_FAILED) + "\n"))
+		return nil
 	}
 
-	words := strings.Split(filter, ",")
+	var words []string = strings.Split(filter, ",")
+	var filtered []feeds.Item
 
-	var filtered []rss.Item
+	for _, item := range parsed.Items {
+		title := strings.ToLower(item.Title)
 
-	for _, item := range doc.Channel.Items {
 		for _, word := range words {
-			w := strings.TrimSpace(word)
-			title := strings.TrimSpace(item.Title)
+			w := strings.ToLower(word)
 
-			if strings.Contains(title, w) {
-				goto cont1
+			if strings.Contains(title, " "+w) || strings.Contains(title, w+" ") {
+				goto outer
 			}
-
 		}
 
 		filtered = append(filtered, item)
 
-	cont1:
-		continue
+	outer:
 	}
 
-	doc.Channel.Items = filtered
-
-	mDoc, err := xml.Marshal(doc)
-	if err != nil {
-		os.Exit(UNMARSHALING_FAILED)
-	}
-
-	mDoc = []byte(strings.Replace(string(mDoc), "Feed>", "rss>", 2))
-	return mDoc
-}
-
-func filteratom(feed []byte, filter string) []byte {
-	var doc atom.Feed
-	err := xml.Unmarshal(feed, &doc)
-
-	if err != nil {
-		os.Exit(UNMARSHALING_FAILED)
-	}
-
-	words := strings.Split(filter, ",")
-
-	var filtered []atom.Entry
-
-	for _, entry := range doc.Entries {
-		for _, word := range words {
-			title := strings.TrimSpace(entry.Title)
-			w := strings.TrimSpace(word)
-
-			if strings.Contains(title, w) {
-				goto cont2
-			}
-
-		}
-
-		filtered = append(filtered, entry)
-
-	cont2:
-		continue
-	}
-
-	mDoc, err := xml.Marshal(doc)
-	if err != nil {
-		os.Exit(UNMARSHALING_FAILED)
-	}
-
-	mDoc = []byte(strings.Replace(string(mDoc), "Feed>", "feed>", 2))
-	return mDoc
-}
-
-func filterfeed(feed []byte, words string) []byte {
-	if strings.Contains(string(feed), "<rss") {
-		return filterrss(feed, words)
-	} else if strings.Contains(string(feed), "<feed") {
-		return filteratom(feed, words)
-	} else {
-		os.Exit(INVALID_FEED)
-	}
-
-	return []byte{}
+	parsed.Items = filtered
+	return feeds.Marshal(parsed)
 }
 
 func main() {
-	var feed = flag.String("feed", "", "")
-	var update = flag.Bool("update", false, "")
-	var metadata = flag.Bool("metadata", false, "")
-	var item = flag.Int("item", -1, "")
-	var items = flag.Bool("items", false, "")
-	var remove = flag.Bool("remove", false, "")
-	var filter = flag.String("filter", "", "")
 
-	_, err := os.Stat("out")
-	if err == nil {
-		os.Remove("out")
-	}
-
-	flag.Parse()
-
-	if *feed == "" {
-		os.Exit(INVALID_FEED)
+	socket, err := net.Listen("unix", "./sock")
+	if err != nil {
+		os.Exit(SOCK_LISTEN_FAILED)
 	}
 
 	createlibrary()
 
-	if *remove {
-		removefeed(*feed)
-		os.Exit(0)
-	} else if *update {
-		updatelibrary(*feed, *filter)
+	for {
+		conn, err := socket.Accept()
+		if err != nil {
+			os.Exit(SOCK_ACCEPT_FAILED)
+		}
+
+		buffer := make([]byte, 4096)
+
+		total_bytes, err := conn.Read(buffer)
+		if err != nil {
+			os.Exit(READ_FAILED)
+		}
+
+		line := strings.Split(string(buffer[:total_bytes]), " ")
+
+		if line[0] == "QUIT" {
+			socket.Close()
+			break
+		}
+
+		switch line[0] {
+		case "UPDATE":
+			if len(line) == 3 {
+				updatelibrary(conn, line[1], line[2])
+			} else {
+				updatelibrary(conn, line[1], "")
+			}
+		case "REMOVE":
+			removefeed(conn, line[1])
+		case "METADATA":
+			showmetadata(conn, line[1])
+		case "ITEMS":
+			showitems(conn, line[1])
+		case "ITEM":
+			number, err := strconv.Atoi(line[2])
+			if err != nil {
+				number = 0
+			}
+
+			showitem(conn, line[1], number)
+		}
+
+		conn.Close()
 	}
 
-	if !checklibrary(*feed) {
-		os.Exit(INVALID_FEED)
-	}
-
-	var data = readfromlibrary(*feed)
-	os.Chdir("..")
-
-	if strings.Contains(string(data), "<feed") {
-		showinfoatom(data, *metadata, *item, *items)
-	} else if strings.Contains(string(data), "<rss") {
-		showinforss(data, *metadata, *item, *items)
-	} else {
-		os.Exit(INVALID_FEED)
-	}
+	os.Remove("../sock")
 }

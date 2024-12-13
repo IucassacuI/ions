@@ -1,9 +1,10 @@
 #include <cutils.h>
-#include <iup.h>
-#include <iup_config.h>
+#include <iup/iup.h>
+#include <iup/iup_config.h>
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <sys/unistd.h>
 #include "helpers.h"
 #include "callbacks.h"
 #include "ui.h"
@@ -69,6 +70,7 @@ void drawmenu(void){
 Ihandle *inittree(void){
 	Ihandle *tree = IupTree();
 	IupSetAttribute(tree, "MAXSIZE", "150x");
+	IupSetAttribute(tree, "EXPAND", "YES");
 	IupSetCallback(tree, "RIGHTCLICK_CB",(Icallback) rclick_cb);
 	IupSetCallback(tree, "SELECTION_CB", (Icallback) feedselection_cb);
 
@@ -143,7 +145,6 @@ void drawtree(void){
 		if(feedlist == NULL)
 			return;
 
-
 		char *feedcopy = mem_alloc(strlen(feedlist)+1);
 		mem_copy(feedcopy, feedlist);
 
@@ -151,26 +152,29 @@ void drawtree(void){
 		int feedcount = str_count(feedcopy, ",");
 
 		for(int j = 0; j < feedcount; j++){
-			char *command = str_format("librarian.exe --feed \"%s\" --metadata", mem_at(feeds, sizeof(char *), j));
+			int fd = librarian();
 
-			int err = librarian(command);
-			if(err){
+			char *command = str_format("METADATA %s", mem_at(feeds, sizeof(char *), j));
+			write(fd, command, strlen(command));
+
+			char *status = readline(fd);
+
+			if(str_include(status, "ERROR")){
+				int err = atoi(str_split(status, " ")[1]);
 				showerror(err, mem_at(feeds, sizeof(char *), j));
 				continue;
 			}
 
-			char *title = mem_alloc(100);
+			char *title = readline(fd);
+			IupSetStrAttribute(tree, "ADDLEAF1", title);
 
-			FILE *out = fopen("out", "r");
-
-			mem_read(title, out);
-			fclose(out);
-
-			IupSetAttribute(tree, "ADDLEAF1", title);
+			close(fd);
 		}
 	}
 
 	IupSetAttribute(tree, "EXPANDALL", "NO");
+
+	mem_freeall(false);
 }
 
 Ihandle *initfeedbox(void){

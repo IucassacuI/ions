@@ -1,10 +1,11 @@
 #define CUTILS_IMPLEMENTATION
 
 #include <cutils.h>
-#include <iup.h>
-#include <iup_config.h>
+#include <iup/iup.h>
+#include <iup/iup_config.h>
 #include <math.h>
 #include <stdio.h>
+#include <unistd.h>
 #include "callbacks.h"
 #include "helpers.h"
 #include "ui.h"
@@ -18,6 +19,11 @@ int main(int argc, char **argv){
 	IupOpen(&argc, &argv);
 	IupSetGlobal("UTF8MODE", "YES");
 	IupSetLanguage("PORTUGUESE");
+
+	if(IupExecute("./librarian", "") != 1){
+		IupMessageError(NULL, "Fatal: o servidor local não pôde ser inicializado.");
+		return 1;
+	}
 
 	config = IupConfig();
 	IupSetAttribute(config, "APP_NAME", "Ions");
@@ -75,8 +81,6 @@ int main(int argc, char **argv){
 
 	IupSetCallback(dialog, "K_cC", (Icallback) copy_cb);
 	IupSetCallback(dialog, "K_cA", (Icallback) open_cb);
-	IupSetCallback(dialog, "K_cV", (Icallback) vlc_cb);
-	IupSetCallback(dialog, "K_cL", (Icallback) lagrange_cb);
 
 	IupSetHandle("dialog", dialog);
 
@@ -95,8 +99,10 @@ int main(int argc, char **argv){
 	IupDestroy(config);
 	IupDestroy(timer);
 
-	remove("out");
 	IupClose();
+
+	int fd = librarian();
+	write(fd, "QUIT", 4);
 
 	mem_freeall(true);
 	return 0;
