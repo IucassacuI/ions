@@ -93,6 +93,9 @@ int remocat_cb(void){
 	IupConfigSetVariableStr(config, "CAT", "LIST", new);
 
 	const char *feeds = IupConfigGetVariableStr(config, "CAT", title);
+	if(feeds == NULL)
+	  return IUP_DEFAULT;
+
 	int count = str_count(feeds, ",");
 	char **list = str_split(feeds, ",");
 
