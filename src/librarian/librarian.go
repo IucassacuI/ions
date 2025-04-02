@@ -69,7 +69,7 @@ func updatelibrary(conn net.Conn, feed, words string) {
 	}
 
 	if resp.StatusCode != 200 {
-		conn.Write([]byte("ERROR" + strconv.Itoa(resp.StatusCode) + "\n"))
+		conn.Write([]byte("ERROR " + strconv.Itoa(resp.StatusCode) + "\n"))
 		return
 	}
 
