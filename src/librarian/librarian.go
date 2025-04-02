@@ -138,6 +138,7 @@ func showitem(conn net.Conn, feed string, number int) {
 	}
 
 	item := doc.Items[number]
+	item.Title = strings.ReplaceAll(item.Title, "&", "&&")
 
 	conn.Write([]byte("OK\n"))
 	conn.Write([]byte(item.Title + "\n"))
