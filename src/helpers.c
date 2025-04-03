@@ -25,26 +25,9 @@ char *readline(FILE *fp){
 
 char *getcurrfeed(void){
 	Ihandle *tree = IupGetHandle("tree");
-	Ihandle *config = IupGetHandle("config");
-
 	int selected = IupGetInt(tree, "VALUE");
 
-	char *parentattr = str_format("PARENT%d", selected);
-	int parentid = IupGetInt(tree, parentattr);
-
-	selected -= parentid;
-	char *titleattr = str_format("TITLE%d", parentid);
-
-	char *cat = IupGetAttribute(tree, titleattr);
-	const char *feeds = IupConfigGetVariableStr(config, "CAT", cat);
-
-	char *copy = mem_alloc(strlen(feeds)+1);
-	mem_copy(copy, feeds);
-
-	int commacount = str_count(copy, ",");
-
-	char **feedlist = str_split(copy, ",");
-	return mem_at(feedlist, sizeof(char *), commacount-selected);
+	return IupGetAttribute(tree, str_format("FEED%d", selected));
 }
 
 void setmetadata(void){

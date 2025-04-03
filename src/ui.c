@@ -26,7 +26,7 @@ void drawmenu(void){
 	IupSetCallback(opmlexport_item, "ACTION", (Icallback) opmlexport_cb);
 	IupSetCallback(exit_item, "ACTION", (Icallback) exit_cb);
 
-	fitems = IupMenu(opmlimport_item, opmlexport_item, exit_item, NULL);
+	fitems = IupMenu(opmlimport_item, opmlexport_item, exit_item, data_item, NULL);
 	file_submenu = IupSubmenu("&Arquivo", fitems);
 
 	addfeed_item = IupItem("Adicionar feed...", NULL);
@@ -143,7 +143,7 @@ void drawtree(void){
 
 		const char *feedlist = IupConfigGetVariableStr(config, "CAT", catlist[i]);
 		if(feedlist == NULL)
-			return;
+			continue;
 
 		char *feedcopy = mem_alloc(strlen(feedlist)+1);
 		mem_copy(feedcopy, feedlist);
@@ -170,6 +170,29 @@ void drawtree(void){
 
 			fclose(fp);
 		}
+	}
+
+	int total_nodes = 1;
+
+	for(int i = 0; i < counter; i++){
+		const char *feedlist = IupConfigGetVariableStr(config, "CAT", catlist[counter - 1 - i]);
+		if(feedlist == NULL)
+			continue;
+
+		char **feeds = str_split(feedlist, ",");
+		int feedcount = str_count(feedlist, ",");
+
+		for(int j = 0; j < feedcount; j++){
+			int pos = total_nodes + j;
+
+			if(str_equal("BRANCH", IupGetAttribute(tree, str_format("KIND%d", pos)))){
+				total_nodes++;
+				pos++;
+			}
+
+			IupSetStrAttribute(tree, str_format("FEED%d", pos), feeds[feedcount - 1 - j]);
+		}
+		total_nodes += feedcount;
 	}
 
 	mem_freeall(false);
