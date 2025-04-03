@@ -99,13 +99,13 @@ int remocat_cb(void){
 	int count = str_count(feeds, ",");
 	char **list = str_split(feeds, ",");
 
-	int fd = librarian();
+	FILE *fp = librarian();
 
 	for(int i = 0; i < count; i++){
 		char *command = str_format("REMOVE %s", list[i]);
-		write(fd, command, strlen(command));
+		fprintf(fp, command);
 
-		char *status = readline(fd);
+		char *status = readline(fp);
 
 		if(str_include(status, "ERROR")){
 			int err = atoi(str_split(status, " ")[1]);
@@ -115,7 +115,7 @@ int remocat_cb(void){
 
 	IupConfigSetVariableStr(config, "CAT", title, "");
 
-	close(fd);
+	fclose(fp);
 	return IUP_DEFAULT;
 }
 
@@ -147,13 +147,13 @@ int addfeed_cb(void){
 	if(status == 0)
 		return IUP_DEFAULT;
 
-	int fd = librarian();
+	FILE *fp = librarian();
 
-	status = update_one(fd, url);
+	status = update_one(fp, url);
 	if(status != 0)
 		return IUP_DEFAULT;
 
-	close(fd);
+	fclose(fp);
 
 	char *titleattr = str_format("TITLE%d", selected);
 
@@ -174,10 +174,10 @@ int addfeed_cb(void){
 
 	char *command2 = str_format("METADATA %s", url);
 
-	fd = librarian();
-	write(fd, command2, strlen(command2));
+	fp = librarian();
+	fprintf(fp, command2);
 
-	char *stat = readline(fd);
+	char *stat = readline(fp);
 	if(str_include(stat, "ERROR")){
 		int err = atoi(str_split(stat, " ")[1]);
 		showerror(err, url);
@@ -186,11 +186,11 @@ int addfeed_cb(void){
 
 	char *leaf = str_format("ADDLEAF%d", selected);
 
-	char *title = readline(fd);
+	char *title = readline(fp);
 
 	IupSetStrAttribute(tree, leaf, title);
 
-	close(fd);
+	fclose(fp);
 	return IUP_DEFAULT;
 }
 
@@ -229,17 +229,17 @@ int remofeed_cb(void){
 
 	char *command = str_format("REMOVE %s", currfeed);
 
-	int fd = librarian();
-	write(fd, command, strlen(command));
+	FILE *fp = librarian();
+	fprintf(fp, command);
 
-	char *status = readline(fd);
+	char *status = readline(fp);
 
 	if(str_include(status, "ERROR")){
 		int err = atoi(str_split(status, " ")[1]);
 		showerror(err, currfeed);
 	}
 
-	close(fd);
+	fclose(fp);
 
 	return IUP_DEFAULT;
 }
@@ -265,10 +265,10 @@ int feedselection_cb(Ihandle *h, int selected, int status){
 
 	char *command = str_format("ITEMS %s", feed);
 
-	int fd = librarian();
-	write(fd, command, strlen(command));
+	FILE *fp = librarian();
+	fprintf(fp, command);
 
-	char *stat = readline(fd);
+	char *stat = readline(fp);
 
 	if(str_include(stat, "ERROR")){
 		int err = atoi(str_split(stat, " ")[1]);
@@ -278,7 +278,7 @@ int feedselection_cb(Ihandle *h, int selected, int status){
 
 	int counter = 0;
 	while(1){
-		char *item = readline(fd);
+		char *item = readline(fp);
 		if(strlen(item) == 0)
 			break;
 
@@ -288,7 +288,7 @@ int feedselection_cb(Ihandle *h, int selected, int status){
 		IupRefresh(itembox);
 	}
 
-	close(fd);
+	fclose(fp);
 	return IUP_DEFAULT;
 }
 

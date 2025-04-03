@@ -10,26 +10,15 @@
 #include <unistd.h>
 #include "helpers.h"
 
-char *readline(int fd){
-	char *buffer = mem_alloc(10);
-	int size = 10;
-	int pos = 0;
+char *readline(FILE *fp){
+	int size = 0;
+	char *buffer = NULL;
+	int chars = getline(&buffer, &size, fp);
 
-	while(1){
-		if(pos == size){
-			size += 10;
-			buffer = mem_ralloc(buffer, size);
-		}
-	
-		read(fd, buffer + pos, 1);
-
-		if(buffer[pos] == '\n'){
-			buffer[pos] = 0;
-			break;
-		}
-
-		pos++;
-	}
+	if(chars == -1)
+		buffer[0] = 0;
+	else
+		buffer[strlen(buffer) - 1] = 0;
 
 	return buffer;
 }
@@ -59,68 +48,76 @@ char *getcurrfeed(void){
 }
 
 void setmetadata(void){
-	int fd = librarian();
+	FILE *fp = librarian();
 
 	char *feed = getcurrfeed();
 	char *command = str_format("METADATA %s", feed);
-	write(fd, command, strlen(command));
+	fprintf(fp, command);
 
-	char *status = readline(fd);
+	char *status = readline(fp);
 
 	if(str_include(status, "ERROR")){
 		int err = atoi(str_split(status, " ")[1]);
 		showerror(err, feed);
+		free(status);
 		return;
 	}
 
-	char *title = readline(fd);
+	free(status);
+
+	char *title = readline(fp);
 
 	Ihandle *feedtitle = IupGetHandle("feedtitle");
 	IupSetStrAttribute(feedtitle, "TITLE", title);
+	free(title);
 
-	char *author = readline(fd);
+	char *author = readline(fp);
 
 	Ihandle *feedauthor = IupGetHandle("feedauthor");
 	IupSetStrAttribute(feedauthor, "TITLE", author);
+	free(author);
 
-	char *hyperlink = readline(fd);
+	char *hyperlink = readline(fp);
 
 	Ihandle *feedhyperlink = IupGetHandle("feedhyperlink");
 	IupSetStrAttribute(feedhyperlink, "TITLE", hyperlink);
 	IupSetStrAttribute(feedhyperlink, "URL", hyperlink);
+	free(hyperlink);
 
-	char *published = readline(fd);
+	char *published = readline(fp);
 
 	Ihandle *feedpubdate = IupGetHandle("feedpubdate");
 	IupSetStrAttribute(feedpubdate, "TITLE", published);
+	free(published);
 
-	char *updated = readline(fd);
+	char *updated = readline(fp);
 
 	Ihandle *feedupdated = IupGetHandle("feedupdated");
 	IupSetStrAttribute(feedupdated, "TITLE", updated);
+	free(updated);
 
 	Ihandle *feedbox = IupGetHandle("feedbox");
 	IupRefresh(feedbox);
 
-	close(fd);
+	fclose(fp);
 	mem_freeall(false);
 }
 
 char *color(char *url, int rw_access, char* rgbcolor){
 	char *command = str_format("METADATA %s", url);
-	int fd = librarian();
-	write(fd, command, strlen(command));
+	FILE *fp = librarian();
+	fprintf(fp, command);
 
-	char *status = readline(fd);
+	char *status = readline(fp);
 	if(str_include(status, "ERROR")){
 		int err = atoi(str_split(status, " ")[1]);
 		showerror(err, url);
 		return "";
 	}
 
-	char *name = readline(fd);
+	char *name = readline(fp);
 
-	close(fd);
+	fclose(fp);
 
 	Ihandle *tree = IupGetHandle("tree");
 	int nodes = IupGetInt(tree, "COUNT");
@@ -148,43 +145,50 @@ void setitem(int pos){
 	char *feed = getcurrfeed();
 	char *command = str_format("ITEM %s %d", feed, pos);
 
-	int fd = librarian();
-	write(fd, command, strlen(command));
+	FILE *fp = librarian();
+	fprintf(fp, command);
 
-	char *status = readline(fd);
-	
+	char *status = readline(fp);
+
 	if(str_include(status, "ERROR")){
 		int err = atoi(str_split(status, " ")[1]);
 		showerror(err, feed);
+		free(status);
 		return;
 	}
 
-	char *title = readline(fd);
-	char *pubdate = readline(fd);
-	char *update = readline(fd);
-	char *url = readline(fd);
+	free(status);
+
+	char *title = readline(fp);
+	char *pubdate = readline(fp);
+	char *update = readline(fp);
+	char *url = readline(fp);
 
 	Ihandle *entrytitle = IupGetHandle("entrytitle");
 	IupSetStrAttribute(entrytitle, "TITLE", title);
+	free(title);
 
 	Ihandle *hyperlink = IupGetHandle("entryhyperlink");
 	IupSetStrAttribute(hyperlink, "TITLE", url);
 	IupSetStrAttribute(hyperlink, "URL", url);
+	free(url);
 
 	Ihandle *entrypubdate = IupGetHandle("entrypubdate");
 	IupSetStrAttribute(entrypubdate, "TITLE", pubdate);
+	free(pubdate);
 
 	Ihandle *entryupdate = IupGetHandle("entryupdate");
 	IupSetStrAttribute(entryupdate, "TITLE", update);
+	free(update);
 
 	Ihandle *entrybox = IupGetHandle("entrybox");
 	IupRefresh(entrybox);
 
-	close(fd);
+	fclose(fp);
 	mem_freeall(false);
 }
 
-int update_one(int fd, char *feed){
+int update_one(FILE *fp, char *feed){
 	char *command = str_format("UPDATE %s", feed);
 	char *filter_out = "";
 
@@ -233,15 +237,18 @@ int update_one(int fd, char *feed){
 		command = str_concat(command, str_format(" %s", filter_out));
 	}
 
-	write(fd, command, strlen(command));
+	fprintf(fp, command);
 
-	char *status = readline(fd);
-	
+	char *status = readline(fp);
+
 	if(str_include(status, "ERROR")){
 		int err = atoi(str_split(status, " ")[1]);
 		showerror(err, feed);
+		free(status);
 		return err;
 	}
+
+	free(status);
 
 	return 0;
 }
@@ -249,23 +256,24 @@ int update_one(int fd, char *feed){
 void updatefeed(void){
 	char *feed = getcurrfeed();
 
-	int fd = librarian();
+	FILE *fp = librarian();
 
-	int err = update_one(fd, feed);
+	int err = update_one(fp, feed);
 	if(err){
 		showerror(err, feed);
 		return;
 	}
 
-	char *status = readline(fd);
+	char *status = readline(fp);
 
-	close(fd);
+	fclose(fp);
 
 	if(str_equal(status, "true"))
 		IupMessage("Notificação", "Feed atualizado");
 	else
 		IupMessage("Notificação", "Nada de novo por aqui...");
 
+	free(status);
 	mem_freeall(false);
 }
 
@@ -296,22 +304,24 @@ void updatefeeds(void){
 
 			color(url, 1, "127 127 127");
 
-			int fd = librarian();
+			FILE *fp = librarian();
 
-			int err = update_one(fd, url);
+			int err = update_one(fp, url);
 			if(err != 0){
 				color(url, 1, IupGetGlobal("DLGFGCOLOR"));
 				continue;
 			}
 
-			char *result = readline(fd);
+			char *result = readline(fp);
 
-			close(fd);
+			fclose(fp);
 
 			if(str_equal(result, "true"))
 				color(url, 1, "0 0 255");
 			else
 				color(url, 1, IupGetGlobal("DLGFGCOLOR"));
+
+			free(result);
 		}
 
 	}
@@ -348,7 +358,7 @@ void showerror(int status, char *url){
 	return;
 }
 
-int librarian(void){
+FILE *librarian(void){
 	int fd;
 	struct sockaddr_un server = {0};
 
@@ -361,5 +371,5 @@ int librarian(void){
 		exit(1);
 	}
 
-	return fd;
+	return fdopen(fd, "w+");
 }

@@ -3,7 +3,6 @@
 #ifndef UI
 #define UI
 
-char    *readline(int fd);
 void 	  drawmenu(void);
 Ihandle *inittree(void);
 Ihandle *inititembox(void);

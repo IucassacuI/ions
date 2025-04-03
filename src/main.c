@@ -101,9 +101,10 @@ int main(int argc, char **argv){
 
 	IupClose();
 
-	int fd = librarian();
-	write(fd, "QUIT", 4);
+	FILE *fp = librarian();
+	fprintf(fp, "QUIT");
 
+	fclose(fp);
 	mem_freeall(true);
 	return 0;
 }

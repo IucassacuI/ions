@@ -152,12 +152,12 @@ void drawtree(void){
 		int feedcount = str_count(feedcopy, ",");
 
 		for(int j = 0; j < feedcount; j++){
-			int fd = librarian();
+			FILE *fp = librarian();
 
 			char *command = str_format("METADATA %s", mem_at(feeds, sizeof(char *), j));
-			write(fd, command, strlen(command));
+			fprintf(fp, command);
 
-			char *status = readline(fd);
+			char *status = readline(fp);
 
 			if(str_include(status, "ERROR")){
 				int err = atoi(str_split(status, " ")[1]);
@@ -165,14 +165,12 @@ void drawtree(void){
 				continue;
 			}
 
-			char *title = readline(fd);
+			char *title = readline(fp);
 			IupSetStrAttribute(tree, "ADDLEAF1", title);
 
-			close(fd);
+			fclose(fp);
 		}
 	}
-
-	IupSetAttribute(tree, "EXPANDALL", "NO");
 
 	mem_freeall(false);
 }
