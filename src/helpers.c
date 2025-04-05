@@ -83,7 +83,6 @@ void setmetadata(void){
 	IupRefresh(feedbox);
 
 	fclose(fp);
-	mem_freeall(false);
 }
 
 char *color(char *url, int rw_access, char* rgbcolor){
@@ -97,6 +96,7 @@ char *color(char *url, int rw_access, char* rgbcolor){
 		showerror(err, url);
 		return "";
 	}
+	free(status);
 
 	char *name = readline(fp);
 
@@ -112,10 +112,12 @@ char *color(char *url, int rw_access, char* rgbcolor){
 		colorattr = str_format("COLOR%d", node);
 
 		if(str_equal(title, name) && rw_access == 0){
+			free(name);
 			return IupGetAttribute(tree, colorattr);
 		}
 
 		if(str_equal(title, name) && rw_access == 1){
+			free(name);
 			IupSetAttribute(tree, colorattr, rgbcolor);
 			return "";
 		}
@@ -168,7 +170,6 @@ void setitem(int pos){
 	IupRefresh(entrybox);
 
 	fclose(fp);
-	mem_freeall(false);
 }
 
 int update_one(FILE *fp, char *feed){
@@ -257,7 +258,6 @@ void updatefeed(void){
 		IupMessage("Notificação", "Nada de novo por aqui...");
 
 	free(status);
-	mem_freeall(false);
 }
 
 void updatefeeds(void){

@@ -26,7 +26,7 @@ void drawmenu(void){
 	IupSetCallback(opmlexport_item, "ACTION", (Icallback) opmlexport_cb);
 	IupSetCallback(exit_item, "ACTION", (Icallback) exit_cb);
 
-	fitems = IupMenu(opmlimport_item, opmlexport_item, exit_item, data_item, NULL);
+	fitems = IupMenu(opmlimport_item, opmlexport_item, exit_item, NULL);
 	file_submenu = IupSubmenu("&Arquivo", fitems);
 
 	addfeed_item = IupItem("Adicionar feed...", NULL);
