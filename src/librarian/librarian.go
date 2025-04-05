@@ -212,7 +212,6 @@ func filterfeed(conn net.Conn, feed []byte, filter string) []byte {
 }
 
 func main() {
-
 	socket, err := net.Listen("unix", "./sock")
 	if err != nil {
 		os.Exit(SOCK_LISTEN_FAILED)
@@ -221,49 +220,51 @@ func main() {
 	createlibrary()
 
 	for {
-		conn, err := socket.Accept()
+		c, err := socket.Accept()
 		if err != nil {
 			os.Exit(SOCK_ACCEPT_FAILED)
 		}
 
-		buffer := make([]byte, 4096)
+		go func(conn net.Conn) {
+			buffer := make([]byte, 4096)
 
-		total_bytes, err := conn.Read(buffer)
-		if err != nil {
-			os.Exit(READ_FAILED)
-		}
-
-		line := strings.Split(string(buffer[:total_bytes]), " ")
-
-		if line[0] == "QUIT" {
-			socket.Close()
-			break
-		}
-
-		switch line[0] {
-		case "UPDATE":
-			if len(line) == 3 {
-				updatelibrary(conn, line[1], line[2])
-			} else {
-				updatelibrary(conn, line[1], "")
-			}
-		case "REMOVE":
-			removefeed(conn, line[1])
-		case "METADATA":
-			showmetadata(conn, line[1])
-		case "ITEMS":
-			showitems(conn, line[1])
-		case "ITEM":
-			number, err := strconv.Atoi(line[2])
+			total_bytes, err := conn.Read(buffer)
 			if err != nil {
-				number = 0
+				os.Exit(READ_FAILED)
 			}
 
-			showitem(conn, line[1], number)
-		}
+			line := strings.Split(string(buffer[:total_bytes]), " ")
 
-		conn.Close()
+			if line[0] == "QUIT" {
+				conn.Close()
+				socket.Close()
+				os.Remove("../sock")
+				os.Exit(0)
+			}
+
+			switch line[0] {
+			case "UPDATE":
+				if len(line) == 3 {
+					updatelibrary(conn, line[1], line[2])
+				} else {
+					updatelibrary(conn, line[1], "")
+				}
+			case "REMOVE":
+				removefeed(conn, line[1])
+			case "METADATA":
+				showmetadata(conn, line[1])
+			case "ITEMS":
+				showitems(conn, line[1])
+			case "ITEM":
+				number, err := strconv.Atoi(line[2])
+				if err != nil {
+					number = 0
+				}
+
+				showitem(conn, line[1], number)
+			}
+
+			conn.Close()
+		}(c)
 	}
-
-	os.Remove("../sock")
 }
