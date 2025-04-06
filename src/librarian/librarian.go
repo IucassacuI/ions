@@ -237,7 +237,6 @@ func main() {
 
 			if line[0] == "QUIT" {
 				conn.Close()
-				socket.Close()
 				os.Remove("../sock")
 				os.Exit(0)
 			}
