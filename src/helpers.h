@@ -1,6 +1,7 @@
 #ifndef HELPERS
 #define HELPERS
 
+void reftreedata(void);
 char *readline(FILE *fp);
 char *getcurrfeed(void);
 void setmetadata(void);

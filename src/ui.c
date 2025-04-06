@@ -172,28 +172,7 @@ void drawtree(void){
 		}
 	}
 
-	int total_nodes = 1;
-
-	for(int i = 0; i < counter; i++){
-		const char *feedlist = IupConfigGetVariableStr(config, "CAT", catlist[counter - 1 - i]);
-		if(feedlist == NULL)
-			continue;
-
-		char **feeds = str_split(feedlist, ",");
-		int feedcount = str_count(feedlist, ",");
-
-		for(int j = 0; j < feedcount; j++){
-			int pos = total_nodes + j;
-
-			if(str_equal("BRANCH", IupGetAttribute(tree, str_format("KIND%d", pos)))){
-				total_nodes++;
-				pos++;
-			}
-
-			IupSetStrAttribute(tree, str_format("FEED%d", pos), feeds[feedcount - 1 - j]);
-		}
-		total_nodes += feedcount;
-	}
+	reftreedata();
 
 	mem_freeall(false);
 }

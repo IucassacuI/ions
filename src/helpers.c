@@ -10,6 +10,40 @@
 #include <unistd.h>
 #include "helpers.h"
 
+void reftreedata(void){
+	Ihandle *cfg = IupGetHandle("config");
+	Ihandle *tree = IupGetHandle("tree");
+
+	const char *catlist = IupConfigGetVariableStr(cfg, "CAT", "LIST");
+
+	int count = str_count(catlist, ",");
+	char **cats = str_split(catlist, ",");
+
+	int total_nodes = 1;
+
+	for(int i = 0; i < count; i++){
+		const char *feedlist = IupConfigGetVariableStr(cfg, "CAT", cats[count - 1 - i]);
+		if(feedlist == NULL)
+			continue;
+
+		char **feeds = str_split(feedlist, ",");
+		int feedcount = str_count(feedlist, ",");
+
+		for(int j = 0; j < feedcount; j++){
+			int pos = total_nodes + j;
+
+			if(str_equal("BRANCH", IupGetAttribute(tree, str_format("KIND%d", pos)))){
+				total_nodes++;
+				pos++;
+			}
+
+			IupSetStrAttribute(tree, str_format("FEED%d", pos), feeds[feedcount - 1 - j]);
+		}
+		total_nodes += feedcount;
+	}
+
+}
+
 char *readline(FILE *fp){
 	int size = 0;
 	char *buffer = NULL;

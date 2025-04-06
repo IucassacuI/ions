@@ -189,6 +189,7 @@ int addfeed_cb(void){
 	char *title = readline(fp);
 
 	IupSetStrAttribute(tree, leaf, title);
+	reftreedata();
 
 	fclose(fp);
 	return IUP_DEFAULT;

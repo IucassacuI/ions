@@ -1,0 +1,5 @@
+bin/library/*
+bin/callbacks.o
+bin/ui.o
+bin/helpers.o
+bin/main.o
