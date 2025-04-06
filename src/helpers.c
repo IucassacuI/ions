@@ -30,6 +30,19 @@ void reftreedata(void){
 		int feedcount = str_count(feedlist, ",");
 
 		for(int j = 0; j < feedcount; j++){
+			FILE *fp = librarian();
+			fprintf(fp, "ITEMS %s", feeds[feedcount - 1 - j]);
+
+			char *status = readline(fp);
+			if(!str_equal(status, "OK")){
+				free(status);
+				fclose(fp);
+				continue;
+			}
+
+			free(status);
+			fclose(fp);
+
 			int pos = total_nodes + j;
 
 			if(str_equal("BRANCH", IupGetAttribute(tree, str_format("KIND%d", pos)))){

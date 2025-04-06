@@ -162,6 +162,7 @@ void drawtree(void){
 			if(str_include(status, "ERROR")){
 				int err = atoi(str_split(status, " ")[1]);
 				showerror(err, mem_at(feeds, sizeof(char *), j));
+				fclose(fp);
 				continue;
 			}
 
