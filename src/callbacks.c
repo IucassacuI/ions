@@ -147,6 +147,9 @@ int addfeed_cb(void){
 	if(status == 0)
 		return IUP_DEFAULT;
 
+	if(str_include(url, "youtube:"))
+		strcpy(url, str_sub(url, "youtube:", "https://youtube.com/feeds/videos.xml?channel_id="));
+
 	FILE *fp = librarian();
 
 	status = update_one(fp, url);
