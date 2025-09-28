@@ -19,9 +19,9 @@ Ihandle *filter_submenu, *filitems, *gfilter_item, *lfilter_item;
 void drawmenu(void){
 	Ihandle *dialog = IupGetHandle("dialog");
 
-	opmlimport_item = IupItem("Importar OPML...", NULL);
-	opmlexport_item = IupItem("Exportar OPML...", NULL);
-	exit_item = IupItem("Sair", NULL);
+	opmlimport_item = IupItem("&Importar OPML...", NULL);
+	opmlexport_item = IupItem("&Exportar OPML...", NULL);
+	exit_item = IupItem("&Sair", NULL);
 
 	IupSetCallback(opmlimport_item, "ACTION", (Icallback) opmlimport_cb);
 	IupSetCallback(opmlexport_item, "ACTION", (Icallback) opmlexport_cb);
@@ -30,10 +30,10 @@ void drawmenu(void){
 	fitems = IupMenu(opmlimport_item, opmlexport_item, exit_item, NULL);
 	file_submenu = IupSubmenu("&Arquivo", fitems);
 
-	addfeed_item = IupItem("Adicionar feed...", NULL);
-	remofeed_item = IupItem("Remover feed", NULL);
-	addcat_item = IupItem("Adicionar categoria...", NULL);
-	remocat_item = IupItem("Remover categoria", NULL);
+	addfeed_item = IupItem("&Adicionar feed...", NULL);
+	remofeed_item = IupItem("&Remover feed", NULL);
+	addcat_item = IupItem("A&dicionar categoria...", NULL);
+	remocat_item = IupItem("R&emover categoria", NULL);
 
 	IupSetCallback(addfeed_item, "ACTION", (Icallback) addfeed_cb);
 	IupSetCallback(remofeed_item, "ACTION", (Icallback) remofeed_cb);
@@ -43,9 +43,9 @@ void drawmenu(void){
 	eitems = IupMenu(addcat_item, remocat_item, addfeed_item, remofeed_item, NULL);
 	edit_submenu = IupSubmenu("&Editar", eitems);
 
-	themes_item = IupItem("Tema...", NULL);
-	timer_item = IupItem("Temporizador", NULL);
-	switch_item = IupItem("Ativar/desativar temporizador", NULL);
+	themes_item = IupItem("&Tema...", NULL);
+	timer_item = IupItem("T&emporizador", NULL);
+	switch_item = IupItem("&Ativar/desativar temporizador", NULL);
 
 	IupSetCallback(themes_item, "ACTION", (Icallback) themes_cb);
 	IupSetCallback(timer_item, "ACTION", (Icallback) timer_cb);
@@ -54,10 +54,10 @@ void drawmenu(void){
 	oitems = IupMenu(themes_item, timer_item, switch_item, NULL);
 	options_submenu = IupSubmenu("&Opções", oitems);
 
-	gfilter_item = IupItem("Global...", NULL);
+	gfilter_item = IupItem("&Global...", NULL);
 	IupSetCallback(gfilter_item, "ACTION", (Icallback) gfilter_cb);
 
-	lfilter_item = IupItem("Local...", NULL);
+	lfilter_item = IupItem("&Local...", NULL);
 	IupSetCallback(lfilter_item, "ACTION", (Icallback) lfilter_cb);
 
 	filitems = IupMenu(gfilter_item, lfilter_item, NULL);
