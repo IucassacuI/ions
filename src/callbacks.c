@@ -120,6 +120,7 @@ int remocat_cb(void){
 
 	IupConfigSetVariableStr(config, "CAT", title, "");
 
+	reftreedata();
 	fclose(fp);
 	buf_free(&list);
 	return IUP_DEFAULT;
