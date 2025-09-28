@@ -1,4 +1,4 @@
-#include <iup/iup.h>
+#include <iup.h>
 
 #ifndef UI
 #define UI

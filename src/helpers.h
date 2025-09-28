@@ -1,9 +1,10 @@
 #ifndef HELPERS
 #define HELPERS
+#include "buffers.h"
 
 void reftreedata(void);
 char *readline(FILE *fp);
-char *getcurrfeed(void);
+char *getcurrfeed(buffers *list);
 void setmetadata(void);
 char *color(char *feed, int rw_access, char *rgbcolor);
 void setitem(int pos);

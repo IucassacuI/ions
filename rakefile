@@ -2,13 +2,14 @@ require 'rake/clean'
 
 task default: %w[bin/ions]
 
-objs = %w[bin/callbacks.o bin/helpers.o bin/ui.o bin/main.o] 
+objs = Dir.glob('src/*.c').map {|f| f.sub('src', 'bin').sub('.c', '.o')}
+
 CLEAN.include *objs
 
 file 'bin/ions' => objs + ['bin/librarian'] do |t|
 	sources = t.sources
 	sources.pop
-	sh "gcc -liup -lm -o bin/ions #{sources.join(' ')} #{`pkg-config --libs gtk+-2.0 gdk-2.0`}"
+	sh "gcc -liup -lm -o bin/ions #{sources.join(' ')} #{`pkg-config --libs gtk+-3.0 gdk-3.0`}"
 end
 
 file 'bin/librarian' => ['src/librarian/librarian.go'] do |t|
@@ -16,5 +17,5 @@ file 'bin/librarian' => ['src/librarian/librarian.go'] do |t|
 end
 
 rule '.o' => [ proc { |name| name.sub('bin', 'src').sub('.o', '.c')} ] do |t|
-	sh "gcc -g -c #{t.source} -o #{t.name} -Icutils"
-end 
+	sh "gcc -g -c #{t.source} -o #{t.name} -Iiup/include"
+end

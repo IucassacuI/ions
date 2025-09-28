@@ -1,8 +1,5 @@
-#define CUTILS_IMPLEMENTATION
-
-#include <cutils.h>
-#include <iup/iup.h>
-#include <iup/iup_config.h>
+#include <iup.h>
+#include <iup_config.h>
 #include <math.h>
 #include <stdio.h>
 #include <unistd.h>
@@ -14,8 +11,6 @@ Ihandle *hbox, *dialog;
 Ihandle *config;
 
 int main(int argc, char **argv){
-	mem_init();
-
 	IupOpen(&argc, &argv);
 	IupSetGlobal("UTF8MODE", "YES");
 	IupSetLanguage("PORTUGUESE");
@@ -105,6 +100,5 @@ int main(int argc, char **argv){
 	fprintf(fp, "QUIT");
 
 	fclose(fp);
-	mem_freeall(true);
 	return 0;
 }

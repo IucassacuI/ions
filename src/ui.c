@@ -1,6 +1,5 @@
-#include <cutils.h>
-#include <iup/iup.h>
-#include <iup/iup_config.h>
+#include <iup.h>
+#include <iup_config.h>
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -8,6 +7,8 @@
 #include "helpers.h"
 #include "callbacks.h"
 #include "ui.h"
+#include "buffers.h"
+#include "strings.h"
 
 Ihandle *menu;
 Ihandle *file_submenu, *fitems, *opmlimport_item, *opmlexport_item, *exit_item;
@@ -123,59 +124,67 @@ Ihandle *initentrybox(void){
 }
 
 void drawtree(void){
+	buffers list = {0};
+
 	Ihandle *config = IupGetHandle("config");
 	Ihandle *tree = IupGetHandle("tree");
 
 	IupSetAttribute(tree, "TITLE", "Feeds");
 
-	const char *list = IupConfigGetVariableStr(config, "CAT", "LIST");
-	if(!list)
+	const char *cfglist = IupConfigGetVariableStr(config, "CAT", "LIST");
+	if(!cfglist)
 		return;
 
-	char *catcopy = mem_alloc(strlen(list)+1);
-	mem_copy(catcopy, list);
+	char *catcopy = buf_alloc(&list, strlen(cfglist)+1);
+	buf_strcopy(catcopy, cfglist);
 
-	char **catlist = str_split(catcopy, ",");
+	char **catlist = str_split(&list, catcopy, ",");
 	int counter = str_count(catcopy, ",");
 
 	for(int i = 0; i < counter; i++){
-		IupSetAttribute(tree, "ADDBRANCH0", mem_at(catlist, sizeof(char *), i));
+		IupSetAttribute(tree, "ADDBRANCH0", buf_at(catlist, i));
 
 		const char *feedlist = IupConfigGetVariableStr(config, "CAT", catlist[i]);
 		if(feedlist == NULL)
 			continue;
 
-		char *feedcopy = mem_alloc(strlen(feedlist)+1);
-		mem_copy(feedcopy, feedlist);
+		char *feedcopy = buf_alloc(&list, strlen(feedlist)+1);
+		buf_strcopy(feedcopy, feedlist);
 
-		char **feeds = str_split(feedcopy, ",");
+		char **feeds = str_split(&list, feedcopy, ",");
 		int feedcount = str_count(feedcopy, ",");
 
 		for(int j = 0; j < feedcount; j++){
 			FILE *fp = librarian();
 
-			char *command = str_format("METADATA %s", mem_at(feeds, sizeof(char *), j));
+			char *command = str_format(&list, "METADATA %s", buf_at(feeds, j));
 			fprintf(fp, command);
 
 			char *status = readline(fp);
 
 			if(str_include(status, "ERROR")){
-				int err = atoi(str_split(status, " ")[1]);
-				showerror(err, mem_at(feeds, sizeof(char *), j));
+				char **split = str_split(&list, status, " ");
+				int err = atoi(split[1]);
+
+				showerror(err, buf_at(feeds, j));
+
 				fclose(fp);
 				continue;
 			}
 
+			free(status);
+
 			char *title = readline(fp);
 			IupSetStrAttribute(tree, "ADDLEAF1", title);
+			free(title);
 
 			fclose(fp);
 		}
+
 	}
 
 	reftreedata();
-
-	mem_freeall(false);
+	buf_free(&list);
 }
 
 Ihandle *initfeedbox(void){

@@ -1,6 +1,5 @@
-#include <cutils.h>
-#include <iup/iup.h>
-#include <iup/iup_config.h>
+#include <iup.h>
+#include <iup_config.h>
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
@@ -9,15 +8,18 @@
 #include <sys/un.h>
 #include <unistd.h>
 #include "helpers.h"
+#include "buffers.h"
+#include "strings.h"
 
 void reftreedata(void){
+	buffers list = {0};
 	Ihandle *cfg = IupGetHandle("config");
 	Ihandle *tree = IupGetHandle("tree");
 
 	const char *catlist = IupConfigGetVariableStr(cfg, "CAT", "LIST");
 
 	int count = str_count(catlist, ",");
-	char **cats = str_split(catlist, ",");
+	char **cats = str_split(&list, catlist, ",");
 
 	int total_nodes = 1;
 
@@ -26,7 +28,7 @@ void reftreedata(void){
 		if(feedlist == NULL)
 			continue;
 
-		char **feeds = str_split(feedlist, ",");
+		char **feeds = str_split(&list, feedlist, ",");
 		int feedcount = str_count(feedlist, ",");
 
 		for(int j = 0; j < feedcount; j++){
@@ -45,16 +47,18 @@ void reftreedata(void){
 
 			int pos = total_nodes + j;
 
-			if(str_equal("BRANCH", IupGetAttribute(tree, str_format("KIND%d", pos)))){
+			if(str_equal("BRANCH", IupGetAttribute(tree, str_format(&list, "KIND%d", pos)))){
 				total_nodes++;
 				pos++;
 			}
 
-			IupSetStrAttribute(tree, str_format("FEED%d", pos), feeds[feedcount - 1 - j]);
+			IupSetStrAttribute(tree, str_format(&list, "FEED%d", pos), feeds[feedcount - 1 - j]);
 		}
 		total_nodes += feedcount;
+
 	}
 
+	buf_free(&list);
 }
 
 char *readline(FILE *fp){
@@ -70,25 +74,29 @@ char *readline(FILE *fp){
 	return buffer;
 }
 
-char *getcurrfeed(void){
+char *getcurrfeed(buffers *list){
 	Ihandle *tree = IupGetHandle("tree");
 	int selected = IupGetInt(tree, "VALUE");
 
-	return IupGetAttribute(tree, str_format("FEED%d", selected));
+	return IupGetAttribute(tree, str_format(list, "FEED%d", selected));
 }
 
 void setmetadata(void){
+	buffers list = {0};
 	FILE *fp = librarian();
 
-	char *feed = getcurrfeed();
-	char *command = str_format("METADATA %s", feed);
+	char *feed = getcurrfeed(&list);
+	char *command = str_format(&list, "METADATA %s", feed);
 	fprintf(fp, command);
 
 	char *status = readline(fp);
 
 	if(str_include(status, "ERROR")){
-		int err = atoi(str_split(status, " ")[1]);
+		char **split = str_split(&list, status, " ");
+		int err = atoi(split[1]);
 		showerror(err, feed);
+
+		buf_free(&list);
 		free(status);
 		return;
 	}
@@ -129,20 +137,27 @@ void setmetadata(void){
 	Ihandle *feedbox = IupGetHandle("feedbox");
 	IupRefresh(feedbox);
 
+	buf_free(&list);
 	fclose(fp);
 }
 
 char *color(char *url, int rw_access, char* rgbcolor){
-	char *command = str_format("METADATA %s", url);
+	buffers list = {0};
+	char *command = str_format(&list, "METADATA %s", url);
 	FILE *fp = librarian();
 	fprintf(fp, command);
 
 	char *status = readline(fp);
 	if(str_include(status, "ERROR")){
-		int err = atoi(str_split(status, " ")[1]);
+		char **split = str_split(&list, status, " ");
+		int err = atoi(split[1]);
+
+		buf_free(&list);
+		free(status);
 		showerror(err, url);
 		return "";
 	}
+
 	free(status);
 
 	char *name = readline(fp);
@@ -155,27 +170,31 @@ char *color(char *url, int rw_access, char* rgbcolor){
 	char *title;
 	char *colorattr;
 	for(int node = 0; node < nodes; node++){
-		title = IupGetAttribute(tree, str_format("TITLE%d", node));
-		colorattr = str_format("COLOR%d", node);
+		title = IupGetAttribute(tree, str_format(&list, "TITLE%d", node));
+		colorattr = str_format(&list, "COLOR%d", node);
 
 		if(str_equal(title, name) && rw_access == 0){
 			free(name);
+			buf_free(&list);
 			return IupGetAttribute(tree, colorattr);
 		}
 
 		if(str_equal(title, name) && rw_access == 1){
 			free(name);
+			buf_free(&list);
 			IupSetAttribute(tree, colorattr, rgbcolor);
 			return "";
 		}
 	}
 
+	buf_free(&list);
 	return "";
 }
 
 void setitem(int pos){
-	char *feed = getcurrfeed();
-	char *command = str_format("ITEM %s %d", feed, pos);
+	buffers list = {0};
+	char *feed = getcurrfeed(&list);
+	char *command = str_format(&list, "ITEM %s %d", feed, pos);
 
 	FILE *fp = librarian();
 	fprintf(fp, command);
@@ -183,9 +202,11 @@ void setitem(int pos){
 	char *status = readline(fp);
 
 	if(str_include(status, "ERROR")){
-		int err = atoi(str_split(status, " ")[1]);
+		int err = atoi(str_split(&list, status, " ")[1]);
 		showerror(err, feed);
+
 		free(status);
+		buf_free(&list);
 		return;
 	}
 
@@ -216,25 +237,28 @@ void setitem(int pos){
 	Ihandle *entrybox = IupGetHandle("entrybox");
 	IupRefresh(entrybox);
 
+	buf_free(&list);
 	fclose(fp);
 }
 
 int update_one(FILE *fp, char *feed){
-	char *command = str_format("UPDATE %s", feed);
+	buffers list = {0};
+	char *command = str_format(&list, "UPDATE %s", feed);
 	char *filter_out = "";
 
 	Ihandle *config = IupGetHandle("config");
 	const char *filter_words = IupConfigGetVariableStr(config, "FILTER", "GLOBAL");
 
 	if(filter_words != NULL){
-		char *words_copy = mem_alloc(strlen(filter_words)+1);
-		mem_copy(words_copy, filter_words);
+		char *words_copy = buf_alloc(&list, strlen(filter_words)+1);
+		buf_strcopy(words_copy, filter_words);
+
 		filter_out = words_copy;
 	}
 
 	const char *catlist = IupConfigGetVariableStr(config, "CAT", "LIST");
 
-	char **cats = str_split(catlist, ",");
+	char **cats = str_split(&list, catlist, ",");
 	int size = str_count(catlist, ",");
 
 	char *category;
@@ -259,13 +283,13 @@ int update_one(FILE *fp, char *feed){
 
 	if(cat_filter != NULL){
 		if(!str_equal(filter_out, ""))
-			filter_out = str_concat(filter_out, ",");
+			filter_out = str_concat(&list, filter_out, ",");
 
-		filter_out = str_concat(filter_out, str_format("%s", cat_filter));
+		filter_out = str_concat(&list, filter_out, str_format(&list, "%s", cat_filter));
 	}
 
 	if(!str_equal(filter_out, "")){
-		command = str_concat(command, str_format(" %s", filter_out));
+		command = str_concat(&list, command, str_format(&list, " %s", filter_out));
 	}
 
 	fprintf(fp, command);
@@ -273,25 +297,30 @@ int update_one(FILE *fp, char *feed){
 	char *status = readline(fp);
 
 	if(str_include(status, "ERROR")){
-		int err = atoi(str_split(status, " ")[1]);
+		char **split = str_split(&list, status, " ");
+		int err = atoi(split[1]);
 		showerror(err, feed);
+
 		free(status);
+		buf_free(&list);
 		return err;
 	}
 
 	free(status);
-
+	buf_free(&list);
 	return 0;
 }
 
 void updatefeed(void){
-	char *feed = getcurrfeed();
+	buffers list = {0};
+	char *feed = getcurrfeed(&list);
 
 	FILE *fp = librarian();
 
 	int err = update_one(fp, feed);
 	if(err){
 		showerror(err, feed);
+		buf_free(&list);
 		return;
 	}
 
@@ -304,10 +333,12 @@ void updatefeed(void){
 	else
 		IupMessage("Notificação", "Nada de novo por aqui...");
 
+	buf_free(&list);
 	free(status);
 }
 
 void updatefeeds(void){
+	buffers list = {0};
 	Ihandle *config = IupGetHandle("config");
 
 	const char *cats = IupConfigGetVariableStr(config, "CAT", "LIST");
@@ -315,17 +346,17 @@ void updatefeeds(void){
 		return;
 
 	int commacount = str_count(cats, ",");
-	char **catlist = str_split(cats, ",");
+	char **catlist = str_split(&list, cats, ",");
 
 	for(int cat = 0; cat < commacount; cat++){
-		const char *feedlist = IupConfigGetVariableStr(config, "CAT", mem_at(catlist, sizeof(char *), cat));
+		const char *feedlist = IupConfigGetVariableStr(config, "CAT", buf_at(catlist, cat));
 
 		int feedscount = str_count(feedlist, ",");
-		char **feeds = str_split(feedlist, ",");
+		char **feeds = str_split(&list, feedlist, ",");
 
 		char *url;
 		for(int feed = 0; feed < feedscount; feed++){
-			url = mem_at(feeds, sizeof(char *), feed);
+			url = buf_at(feeds, feed);
 
 			char *c = color(url, 0, NULL);
 			if(str_equal(c, "") || str_equal(c, "0 0 255")){
@@ -353,10 +384,9 @@ void updatefeeds(void){
 
 			free(result);
 		}
-
 	}
 
-	mem_freeall(false);
+	buf_free(&list);
 }
 
 void thread_update(void){
@@ -366,6 +396,7 @@ void thread_update(void){
 }
 
 void showerror(int status, char *url){
+	buffers list = {0};
 	char *msgs[] = {
 		"dummy",
 		"Feed inválido.",
@@ -376,15 +407,16 @@ void showerror(int status, char *url){
 		"Falha ao remover feed do cache."
 	};
 
-	char *msg = str_format("%s:\n", url);
+	char *msg = str_format(&list, "%s:\n", url);
 
 	if(status <= 6){
-		msg = str_concat(msg, msgs[status]);
+		msg = str_concat(&list, msg, msgs[status]);
 	} else {
-		msg = str_concat(msg, str_format("Recebido HTTP %d. Esperava HTTP 200 (OK).", status));
+		msg = str_concat(&list, msg, str_format(&list, "Recebido HTTP %d. Esperava HTTP 200 (OK).", status));
 	}
 
 	IupMessageError(NULL, msg);
+	buf_free(&list);
 	return;
 }
 

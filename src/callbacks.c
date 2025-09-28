@@ -1,6 +1,5 @@
-#include <cutils.h>
-#include <iup/iup.h>
-#include <iup/iup_config.h>
+#include <iup.h>
+#include <iup_config.h>
 #include <math.h>
 #include <string.h>
 #include <stdio.h>
@@ -8,6 +7,8 @@
 #include <unistd.h>
 #include "callbacks.h"
 #include "helpers.h"
+#include "buffers.h"
+#include "strings.h"
 
 int opmlimport_cb(void){
 	IupMessage("ACTION", "a implementar import de OPML...");
@@ -26,6 +27,7 @@ int exit_cb(void){
 }
 
 int addcat_cb(void){
+	buffers list = {0};
 	Ihandle *tree = IupGetHandle("tree");
 	Ihandle *config = IupGetHandle("config");
 
@@ -40,30 +42,31 @@ int addcat_cb(void){
 
 	categories = IupConfigGetVariableStr(config, "CAT", "LIST");
 
-	char *new = str_format("%s,", cat);
+	char *new = str_format(&list, "%s,", cat);
 
 	if(!categories){
 		IupConfigSetVariableStr(config, "CAT", "LIST", new);
 		return IUP_DEFAULT;
 	}
 
-	char *list = mem_alloc(strlen(categories)+CAT_LIMIT);
-	mem_copy(list, categories);
+	char *catlist = buf_alloc(&list, strlen(categories)+CAT_LIMIT);
+	buf_strcopy(catlist, categories);
 
-	mem_copy(list, str_concat(list, new));
-	IupConfigSetVariableStr(config, "CAT", "LIST", list);
+	buf_strcopy(catlist, str_concat(&list, catlist, new));
+	IupConfigSetVariableStr(config, "CAT", "LIST", catlist);
 
-	mem_freeall(false);
+	buf_free(&list);
 	return IUP_DEFAULT;
 }
 
 int remocat_cb(void){
+	buffers list = {0};
 	Ihandle *config = IupGetHandle("config");
 	Ihandle *tree = IupGetHandle("tree");
 
 	int selected = IupGetInt(tree, "VALUE");
-	char *kindattr = str_format("KIND%d", selected);
-	char *titleattr = str_format("TITLE%d", selected);
+	char *kindattr = str_format(&list, "KIND%d", selected);
+	char *titleattr = str_format(&list, "TITLE%d", selected);
 
 	char *kind = IupGetAttribute(tree, kindattr);
 	char *title = IupGetAttribute(tree, titleattr);
@@ -81,14 +84,14 @@ int remocat_cb(void){
 
 	const char *categories = IupConfigGetVariableStr(config, "CAT", "LIST");
 
-	char *copy = mem_alloc(strlen(categories)+1);
-	mem_copy(copy, categories);
+	char *copy = buf_alloc(&list, strlen(categories)+1);
+	buf_strcopy(copy, categories);
 
-	char *new = mem_alloc(strlen(categories)+1);
+	char *new = buf_alloc(&list, strlen(categories)+1);
 
-	char *formatted = str_format("%s,", title);
+	char *formatted = str_format(&list, "%s,", title);
 
-	mem_copy(new, str_sub(copy, formatted, ""));
+	buf_strcopy(new, str_sub(&list, copy, formatted, ""));
 
 	IupConfigSetVariableStr(config, "CAT", "LIST", new);
 
@@ -97,35 +100,39 @@ int remocat_cb(void){
 	  return IUP_DEFAULT;
 
 	int count = str_count(feeds, ",");
-	char **list = str_split(feeds, ",");
+	char **feedlist = str_split(&list, feeds, ",");
 
 	FILE *fp = librarian();
 
 	for(int i = 0; i < count; i++){
-		char *command = str_format("REMOVE %s", list[i]);
+		char *command = str_format(&list, "REMOVE %s", feedlist[i]);
 		fprintf(fp, command);
 
 		char *status = readline(fp);
 
 		if(str_include(status, "ERROR")){
-			int err = atoi(str_split(status, " ")[1]);
-			showerror(err, list[i]);
+			int err = atoi(str_split(&list, status, " ")[1]);
+			showerror(err, feedlist[i]);
 		}
+
+		free(status);
 	}
 
 	IupConfigSetVariableStr(config, "CAT", title, "");
 
 	fclose(fp);
+	buf_free(&list);
 	return IUP_DEFAULT;
 }
 
 int addfeed_cb(void){
+	buffers list = {0};
 	Ihandle *tree = IupGetHandle("tree");
 	Ihandle *config = IupGetHandle("config");
 
 	int selected = IupGetInt(tree, "VALUE");
 
-	char *kindattr = str_format("KIND%d", selected);
+	char *kindattr = str_format(&list, "KIND%d", selected);
 	char *kind = IupGetAttribute(tree, kindattr);
 
 	if(!str_equal(kind, "BRANCH") || selected == 0){
@@ -148,7 +155,7 @@ int addfeed_cb(void){
 		return IUP_DEFAULT;
 
 	if(str_include(url, "youtube:"))
-		strcpy(url, str_sub(url, "youtube:", "https://youtube.com/feeds/videos.xml?channel_id="));
+		strcpy(url, str_sub(&list, url, "youtube:", "https://youtube.com/feeds/videos.xml?channel_id="));
 
 	FILE *fp = librarian();
 
@@ -158,53 +165,59 @@ int addfeed_cb(void){
 
 	fclose(fp);
 
-	char *titleattr = str_format("TITLE%d", selected);
+	char *titleattr = str_format(&list, "TITLE%d", selected);
 
 	char *category = IupGetAttribute(tree, titleattr);
-	const char *list = IupConfigGetVariableStr(config, "CAT", category);
+	const char *catlist = IupConfigGetVariableStr(config, "CAT", category);
 
-	char *item = str_format("%s,", url);
+	char *item = str_format(&list, "%s,", url);
 
-	if(!list){
+	if(!catlist){
 		IupConfigSetVariableStr(config, "CAT", category, item);
 	} else {
-		char *copy = mem_alloc(strlen(list)+URL_LIMIT);
-		mem_copy(copy, list);
-		mem_copy(copy, str_concat(copy, item));
+		char *copy = buf_alloc(&list, strlen(catlist)+URL_LIMIT);
+		buf_strcopy(copy, catlist);
+		copy = str_concat(&list, copy, item);
 
 		IupConfigSetVariableStr(config, "CAT", category, copy);
 	}
 
-	char *command2 = str_format("METADATA %s", url);
+	char *command2 = str_format(&list, "METADATA %s", url);
 
 	fp = librarian();
 	fprintf(fp, command2);
 
 	char *stat = readline(fp);
 	if(str_include(stat, "ERROR")){
-		int err = atoi(str_split(stat, " ")[1]);
+		int err = atoi(str_split(&list, stat, " ")[1]);
 		showerror(err, url);
+
+		free(stat);
+		buf_free(&list);
 		return IUP_DEFAULT;
 	}
 
-	char *leaf = str_format("ADDLEAF%d", selected);
+	char *leaf = str_format(&list, "ADDLEAF%d", selected);
 
 	char *title = readline(fp);
 
 	IupSetStrAttribute(tree, leaf, title);
 	reftreedata();
+	free(title);
 
 	fclose(fp);
+	buf_free(&list);
 	return IUP_DEFAULT;
 }
 
 int remofeed_cb(void){
+	buffers list = {0};
 	Ihandle *tree = IupGetHandle("tree");
 	Ihandle *config = IupGetHandle("config");
 
 	int selected = IupGetInt(tree, "VALUE");
 
-	char *kindattr = str_format("KIND%d", selected);
+	char *kindattr = str_format(&list, "KIND%d", selected);
 	char *kind = IupGetAttribute(tree, kindattr);
 
 	if(str_equal(kind, "BRANCH")){
@@ -212,26 +225,26 @@ int remofeed_cb(void){
 		return IUP_DEFAULT;
 	}
 
-	char *parentattr = str_format("PARENT%d", selected);
+	char *parentattr = str_format(&list, "PARENT%d", selected);
 	int catid = IupGetInt(tree, parentattr);
-	char *titleattr = str_format("TITLE%d", catid);
+	char *titleattr = str_format(&list, "TITLE%d", catid);
 
 	char *category = IupGetAttribute(tree, titleattr);
 	const char *feeds = IupConfigGetVariableStr(config, "CAT", category);
-	char *currfeed = getcurrfeed();
+	char *currfeed = getcurrfeed(&list);
 
-	char *copy = mem_alloc(strlen(feeds)+1);
-	mem_copy(copy, feeds);
+	char *copy = buf_alloc(&list, strlen(feeds)+1);
+	buf_strcopy(copy, feeds);
 
-	char *new = mem_alloc(strlen(feeds)+1);
+	char *new = buf_alloc(&list, strlen(feeds)+1);
 
-	mem_copy(new, str_sub(copy, str_format("%s,", currfeed), ""));
+	new = str_sub(&list, copy, str_format(&list, "%s,", currfeed), "");
 
 	IupConfigSetVariableStr(config, "CAT", category, new);
 
 	IupSetAttribute(tree, "DELNODE", "SELECTED");
 
-	char *command = str_format("REMOVE %s", currfeed);
+	char *command = str_format(&list, "REMOVE %s", currfeed);
 
 	FILE *fp = librarian();
 	fprintf(fp, command);
@@ -239,23 +252,28 @@ int remofeed_cb(void){
 	char *status = readline(fp);
 
 	if(str_include(status, "ERROR")){
-		int err = atoi(str_split(status, " ")[1]);
+		int err = atoi(str_split(&list, status, " ")[1]);
 		showerror(err, currfeed);
 	}
 
+	reftreedata();
+
 	fclose(fp);
+	free(status);
+	buf_free(&list);
 
 	return IUP_DEFAULT;
 }
 
 int feedselection_cb(Ihandle *h, int selected, int status){
+	buffers list = {0};
 	Ihandle *itembox = IupGetHandle("itembox");
-	Ihandle *list = IupGetHandle("list");
+	Ihandle *feedlist = IupGetHandle("list");
 	Ihandle *tree = IupGetHandle("tree");
 
-	IupSetAttribute(list, "1", NULL);
+	IupSetAttribute(feedlist, "1", NULL);
 
-	char *kindattr = str_format("KIND%d", selected);
+	char *kindattr = str_format(&list, "KIND%d", selected);
 	char *kind = IupGetAttribute(tree, kindattr);
 
 	if(str_equal(kind, "BRANCH") || status == 0)
@@ -263,11 +281,11 @@ int feedselection_cb(Ihandle *h, int selected, int status){
 
 	setmetadata();
 
-	char *feed = getcurrfeed();
+	char *feed = getcurrfeed(&list);
 
 	color(feed, 1, IupGetGlobal("DLGFGCOLOR"));
 
-	char *command = str_format("ITEMS %s", feed);
+	char *command = str_format(&list, "ITEMS %s", feed);
 
 	FILE *fp = librarian();
 	fprintf(fp, command);
@@ -275,10 +293,15 @@ int feedselection_cb(Ihandle *h, int selected, int status){
 	char *stat = readline(fp);
 
 	if(str_include(stat, "ERROR")){
-		int err = atoi(str_split(stat, " ")[1]);
+		int err = atoi(str_split(&list, stat, " ")[1]);
 		showerror(err, feed);
+
+		free(stat);
+		buf_free(&list);
 		return IUP_DEFAULT;
 	}
+
+	free(stat);
 
 	int counter = 0;
 	while(1){
@@ -287,12 +310,15 @@ int feedselection_cb(Ihandle *h, int selected, int status){
 			break;
 
 		counter++;
-		IupSetStrAttribute(list, str_format("%d", counter), item);
-		IupMap(list);
+		IupSetStrAttribute(feedlist, str_format(&list, "%d", counter), item);
+		IupMap(feedlist);
 		IupRefresh(itembox);
+
+		free(item);
 	}
 
 	fclose(fp);
+	buf_free(&list);
 	return IUP_DEFAULT;
 }
 
@@ -307,20 +333,22 @@ int itemselection_cb(Ihandle *item, char* text, int pos, int state){
 }
 
 int rclick_cb(Ihandle *h, int id){
+	buffers list = {0};
 	Ihandle *tree = IupGetHandle("tree");
 	IupSetInt(tree, "VALUE", id);
 
-	char *kindattr = str_format("KIND%d", id);
-
+	char *kindattr = str_format(&list, "KIND%d", id);
 	char *kind = IupGetAttribute(tree, kindattr);
 
-	if(!str_equal(kind, "LEAF") && id != 0)
+	if(!str_equal(kind, "LEAF") && id != 0){
+		buf_free(&list);
 		return IUP_DEFAULT;
+	}
 
 	Ihandle *upitem;
 
 	if(id == 0){
-	        upitem = IupItem("Atualizar todos", NULL);
+	  upitem = IupItem("Atualizar todos", NULL);
 		IupSetCallback(upitem, "ACTION", (Icallback) thread_update);
 	} else {
 		upitem = IupItem("Atualizar feed", NULL);
@@ -332,6 +360,7 @@ int rclick_cb(Ihandle *h, int id){
 	IupPopup(menu, IUP_MOUSEPOS, IUP_MOUSEPOS);
 	feedselection_cb(NULL, id, 1);
 
+	buf_free(&list);
 	return IUP_DEFAULT;
 }
 
@@ -449,20 +478,21 @@ int gfilter_cb(void){
 }
 
 int lfilter_cb(void){
+	buffers list = {0};
 	Ihandle *cfg = IupGetHandle("config");
 
 	const char *cats = IupConfigGetVariableStr(cfg, "CAT", "LIST");
 	int count = str_count(cats, ",");
 
-	char **list = str_split(cats, ",");
+	char **catlist = str_split(&list, cats, ",");
 
 	char *fmt = "Categoria: %l|";
 	for(int i = 0; i < count; i++){
-		fmt = str_concat(fmt, list[i]);
-		fmt = str_concat(fmt, "|");
+		fmt = str_concat(&list, fmt, catlist[i]);
+		fmt = str_concat(&list, fmt, "|");
 	}
 
-	fmt = str_concat(fmt, "\n");
+	fmt = str_concat(&list, fmt, "\n");
 
 	int choice = 0;
 	int status = IupGetParam("Filtro local", NULL, 0, fmt, &choice);
@@ -472,7 +502,7 @@ int lfilter_cb(void){
 
 	char words[10000] = "";
 
-	const char *w = IupConfigGetVariableStr(cfg, "FILTER", list[choice]);
+	const char *w = IupConfigGetVariableStr(cfg, "FILTER", catlist[choice]);
 	if(w != NULL){
 		strncpy(words, w, 9999);
 	}
@@ -482,7 +512,7 @@ int lfilter_cb(void){
 		return IUP_DEFAULT;
 	}
 
-	IupConfigSetVariableStr(cfg, "FILTER", list[choice], words);
+	IupConfigSetVariableStr(cfg, "FILTER", catlist[choice], words);
 
 	return IUP_DEFAULT;
 }
