@@ -140,6 +140,10 @@ func showitem(conn net.Conn, feed string, number int) {
 	item := doc.Items[number]
 	item.Title = strings.ReplaceAll(item.Title, "&", "&&")
 
+	if len(item.Title) > 45 {
+		item.Title = fmt.Sprintf("%.45s...", item.Title)
+	}
+
 	conn.Write([]byte("OK\n"))
 	conn.Write([]byte(item.Title + "\n"))
 	conn.Write([]byte(item.Published + "\n"))
@@ -164,6 +168,10 @@ func showitems(conn net.Conn, feed string) {
 	conn.Write([]byte("OK\n"))
 
 	for _, item := range doc.Items {
+		if len(item.Title) > 45 {
+			item.Title = fmt.Sprintf("%.45s...", item.Title)
+		}
+
 		conn.Write([]byte(item.Title + "\n"))
 	}
 }
