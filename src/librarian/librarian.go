@@ -61,8 +61,17 @@ func readfromlibrary(feedurl string) []byte {
 
 func updatelibrary(conn net.Conn, feed, words string) {
 	var hash string = calchash(feed)
+	client := &http.Client{}
 
-	resp, err := http.Get(feed)
+	req, err := http.NewRequest("GET", feed, nil)
+	if err != nil {
+		conn.Write([]byte("ERROR" + strconv.Itoa(CONNECTION_FAILED) + "\n"))
+		return
+	}
+
+	req.Header.Add("User-Agent", "ions / 1.0 (https://github.com/IucassacuI/ions)");
+
+	resp, err := client.Do(req)
 	if err != nil {
 		conn.Write([]byte("ERROR " + strconv.Itoa(CONNECTION_FAILED) + "\n"))
 		return
